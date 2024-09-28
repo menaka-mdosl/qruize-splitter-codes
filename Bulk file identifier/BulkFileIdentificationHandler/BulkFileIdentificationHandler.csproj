@@ -1,0 +1,60 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<TargetFramework>net8.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>disable</Nullable>
+		<GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
+		<AWSProjectType>Lambda</AWSProjectType>
+		<!-- This property makes the build directory similar to a publish directory and helps the AWS .NET Lambda Mock Test Tool find project dependencies. -->
+		<CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+		<!-- Generate ready to run images during publishing to improve cold start time. -->
+		<PublishReadyToRun>true</PublishReadyToRun>
+	</PropertyGroup>
+	<ItemGroup>
+	  <None Remove="appsettings.json" />
+	  <None Remove="Aspose.TotalProductFamily.lic" />
+	</ItemGroup>
+	<ItemGroup>
+	  <Content Include="appsettings.json">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </Content>
+	</ItemGroup>
+	<ItemGroup>
+	  <EmbeddedResource Include="Aspose.TotalProductFamily.lic" />
+	</ItemGroup>
+	<ItemGroup>
+		<PackageReference Include="Amazon.Lambda.Core" Version="2.2.0" />
+		<PackageReference Include="Amazon.Lambda.Logging.AspNetCore" Version="3.1.0" />
+		<PackageReference Include="Amazon.Lambda.S3Events" Version="3.1.0" />
+		<PackageReference Include="Amazon.Lambda.Serialization.SystemTextJson" Version="2.4.3" />
+		<PackageReference Include="Amazon.Lambda.SNSEvents" Version="2.0.0" />
+		<PackageReference Include="Amazon.Lambda.SQSEvents" Version="2.1.0" />
+		<PackageReference Include="Aspose.BarCode" Version="24.6.0" />
+		<PackageReference Include="Aspose.PDF.Drawing" Version="24.4.0" />
+		<PackageReference Include="AWSSDK.Extensions.NETCore.Setup" Version="3.7.301" />
+		<PackageReference Include="AWSSDK.S3" Version="3.7.310.6" />
+		<PackageReference Include="AWSSDK.SimpleNotificationService" Version="3.7.3.100" />
+		<PackageReference Include="Microsoft.Extensions.Configuration" Version="8.0.0" />
+		<PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="8.0.1" />
+		<PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="6.0.1" />
+		<PackageReference Include="Microsoft.Extensions.Configuration.FileExtensions" Version="6.0.0" />
+		<PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="6.0.0" />
+		<PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="6.0.0" />
+		<PackageReference Include="Microsoft.Extensions.Logging" Version="6.0.0" />
+		<PackageReference Include="MongoDB.Driver" Version="2.26.0" />
+		<PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+		<PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="2.88.8" />
+		<PackageReference Include="System.Drawing.Common" Version="8.0.4" />
+	</ItemGroup>
+	<ItemGroup>
+	  <ProjectReference Include="..\MDO2.Core.LMD\MDO2.Core.LMD.csproj" />
+	  <ProjectReference Include="..\MDO2.Core.Model\MDO2.Core.Model.csproj" />
+	  <ProjectReference Include="..\MDO2.Core.QMS\MDO2.Core.QMS.csproj" />
+	  <ProjectReference Include="..\MDO2.Core\MDO2.Core.csproj" />
+	</ItemGroup>
+	<ItemGroup>
+	  <None Update="aws-lambda-tools-defaults.json">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </None>
+	</ItemGroup>
+</Project>
