@@ -26,5 +26,9 @@ namespace QruizeBulkFileSQSReceiver
         public string newS3Bucket { get; set; }
         public bool processed { get; set; }
         public string bulkType { get; set; }
+
+
+
+        public string receiptHandle { get; set; }
     }
 }

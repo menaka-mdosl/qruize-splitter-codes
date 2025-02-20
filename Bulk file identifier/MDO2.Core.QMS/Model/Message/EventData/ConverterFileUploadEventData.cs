@@ -1,4 +1,5 @@
 ﻿using Newtonsoft.Json;
+using System.Collections.Generic;
 
 namespace MDO2.Core.QMS.Model.Message.EventData
 {
@@ -12,5 +13,8 @@ namespace MDO2.Core.QMS.Model.Message.EventData
 
         [JsonProperty("statusMessage")]
         public string StatusMessage { get; set; }
+
+        [JsonProperty("reportList")]
+        public List<IndexedReportDataElements> ReportList { get; set; } = new List<IndexedReportDataElements>();
     }
 }

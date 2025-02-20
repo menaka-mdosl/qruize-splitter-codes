@@ -8,6 +8,8 @@ using QMS = MDO2.Core.QMS;
 using System.Text.Json.Nodes;
 using Newtonsoft.Json;
 using BulkFileIdentificationHandler.Core.App.Model;
+using Amazon.S3;
+using Amazon.SQS;
 
 
 // Assembly attribute to enable the Lambda function's JSON input to be converted into a .NET class.
@@ -21,9 +23,11 @@ namespace BulkFileIdentificationHandler
         private readonly ILogger logger;
         private readonly IAmazonSimpleNotificationService snsService;
         private readonly IConfigurationRoot configurationRoot;
+        private readonly IAmazonSQS _sqsClient;
 
         public Function()
         {
+            _sqsClient = new AmazonSQSClient();
             Startup.Setup();
             logger = Startup.ServiceProvider.GetRequiredService<ILogger<Function>>();
             snsService = Startup.ServiceProvider.GetService<IAmazonSimpleNotificationService>();
@@ -69,6 +73,17 @@ namespace BulkFileIdentificationHandler
             
             var EventData = JsonConvert.DeserializeObject<MessegeSettings>(jsonEvnt.ToString());// deserialize the json object
             logger?.LogInformation($"Received Step Function trigger. Entries={EventData}");
+
+            var receiptHandle = jsonEvnt["receiptHandle"]?.ToString(); // Extract the receiptHandle if it exists
+            if (receiptHandle != null)
+            {
+                logger?.LogInformation($"Received receiptHandle: {receiptHandle}");
+            }
+            else
+            {
+                logger?.LogInformation("ReceiptHandle not found in the incoming event.");
+            }
+
 
             var app = Startup.ServiceProvider.GetRequiredService<SFAppEntryPoint>();
             var result = await app.Run(EventData);//run the main event

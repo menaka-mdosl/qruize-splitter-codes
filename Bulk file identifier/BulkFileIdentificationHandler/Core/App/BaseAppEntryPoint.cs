@@ -20,6 +20,11 @@ using Amazon.S3.Model;
 using Document = Aspose.Pdf.Document;
 using Aspose.Pdf.Text;
 using Aspose.Pdf.Facades;
+using Newtonsoft.Json;
+using System.Text;
+using static Amazon.Lambda.SQSEvents.SQSEvent;
+using Amazon.SQS.Model;
+using Amazon.SimpleNotificationService.Util;
 
 namespace BulkFileIdentificationHandler.Core.App
 {
@@ -337,7 +342,7 @@ namespace BulkFileIdentificationHandler.Core.App
                     imageStream.Position = 0;
 
                     // Check for barcode in the image stream
-                    using (BarCodeReader reader = new BarCodeReader(imageStream, DecodeType.AllSupportedTypes))
+                    using (BarCodeReader reader = new BarCodeReader(imageStream, DecodeType.Code128, DecodeType.Code39, DecodeType.EAN13, DecodeType.UPCA, DecodeType.Code93, DecodeType.Pdf417))//DecodeType.AllSupportedTypes
                     {
                         var barcodes = reader.ReadBarCodes();
                         if (barcodes.Count() > 0)
@@ -390,6 +395,44 @@ namespace BulkFileIdentificationHandler.Core.App
             return isReadable;
         }
 
+        //internal bool CheckIfPdfContainsTextOrImages(string binaryPath)
+        //{
+        //    // Instantiate a memoryStream object to hold the extracted text from Document
+        //    MemoryStream ms = new MemoryStream();
+        //    // Instantiate PdfExtractor object
+        //    PdfExtractor extractor = new PdfExtractor();
+
+        //    // Bind the input PDF document to extractor
+        //    extractor.BindPdf(binaryPath);
+        //    // Extract text from the input PDF document
+        //    extractor.ExtractText();
+        //    // Save the extracted text to a text file
+        //    extractor.GetText(ms);
+        //    // Check if the MemoryStream length is greater than or equal to 1
+
+        //    bool containsText = ms.Length >= 1;
+
+        //    // Extract images from the input PDF document
+        //    extractor.ExtractImage();
+
+        //    // Calling HasNextImage method in while loop. When images will finish, loop will exit
+        //    bool containsImage = extractor.HasNextImage();
+
+        //    // Now find out whether this PDF is text only or image only
+
+        //    if (containsText && !containsImage)
+        //        Console.WriteLine("PDF contains text only");
+        //    else if (!containsText && containsImage)
+        //        Console.WriteLine("PDF contains image only");
+        //    else if (containsText && containsImage)
+        //        Console.WriteLine("PDF contains both text and image");
+        //    else if (!containsText && !containsImage)
+        //        Console.WriteLine("PDF contains neither text or nor image");
+
+        //    return containsImage;
+        //}
+
+
         internal bool CheckIfPdfContainsTextOrImages(string binaryPath)
         {
             // Instantiate a memoryStream object to hold the extracted text from Document
@@ -403,248 +446,771 @@ namespace BulkFileIdentificationHandler.Core.App
             extractor.ExtractText();
             // Save the extracted text to a text file
             extractor.GetText(ms);
-            // Check if the MemoryStream length is greater than or equal to 1
 
+            // Check if the MemoryStream length is greater than or equal to 1
             bool containsText = ms.Length >= 1;
 
             // Extract images from the input PDF document
             extractor.ExtractImage();
-
-            // Calling HasNextImage method in while loop. When images will finish, loop will exit
             bool containsImage = extractor.HasNextImage();
+            bool containsBarcode = false;
 
-            // Now find out whether this PDF is text only or image only
+            // If the PDF contains images, check for barcodes
+            if (containsImage)
+            {
+                while (extractor.HasNextImage())
+                {
+                    using (MemoryStream imageStream = new MemoryStream())
+                    {
+                        extractor.GetNextImage(imageStream);
 
+
+                        using (Bitmap bitmap = new Bitmap(imageStream))
+                        {
+                            // Initialize Barcode Reader
+                            using (BarCodeReader reader = new BarCodeReader(bitmap, DecodeType.Code128, DecodeType.Code39, DecodeType.EAN13, DecodeType.UPCA, DecodeType.Code93, DecodeType.Pdf417)) // DecodeType.AllSupportedTypes
+                            {
+                                if (reader.ReadBarCodes().Length > 0)
+                                {
+                                    containsBarcode = true;
+                                    break; // Exit loop as soon as we detect a barcode
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Log results
+            Console.WriteLine($"Contains Text: {containsText}");
+            Console.WriteLine($"Contains Image: {containsImage}");
+            Console.WriteLine($"Contains Barcode: {containsBarcode}");
+
+            // Determine PDF content type
             if (containsText && !containsImage)
                 Console.WriteLine("PDF contains text only");
             else if (!containsText && containsImage)
                 Console.WriteLine("PDF contains image only");
             else if (containsText && containsImage)
                 Console.WriteLine("PDF contains both text and image");
-            else if (!containsText && !containsImage)
-                Console.WriteLine("PDF contains neither text or nor image");
+            else
+                Console.WriteLine("PDF contains neither text nor image");
 
             return containsImage;
         }
 
+
+        //----WORK CODE
+        //protected async Task<ProcessedFileEntry> ProcessFile(string s3Bucket, string metadataS3Key)
+        //{
+        //    Logger.LogInformation("Starting barcode file processing.");
+        //    string currentProcessingStage = STAGE_STARTING;
+
+        //    var result = new ProcessedFileEntry();
+        //    var convertedDoc = new ConvertedDocument();
+        //    MetadataFile metadataFile = null;
+        //    string binaryFilePath = string.Empty;
+        //    bool errorOccurred = false;
+
+        //    try
+        //    {
+        //        currentProcessingStage = STAGE_S3_DOWNLOAD;
+        //        metadataFile = await ReadMetadataFile(s3Bucket, metadataS3Key);
+
+        //        var evnt = CreateFileInEvent(metadataFile);
+        //        Logger.LogInformation("Created bulk file in event.");
+        //        await SendQMSMessage(evnt);
+
+        //        string tempPath = Configuration.GetTempPath();
+        //        binaryFilePath = await ReadBinaryFile(s3Bucket, metadataFile.S3Key, tempPath);
+
+        //        Logger.LogDebug($"Checking if the file is readable. BinaryFilePath={binaryFilePath}");
+
+        //        SetLicense();
+
+        //        bool containsImages = CheckIfPdfContainsTextOrImages(binaryFilePath);
+
+        //        string bulkType = containsImages && ContainsBarcodeInPDF(binaryFilePath) ? "BARCODE" : containsImages ? "UNIDENTIFIED" : "BATCH";
+
+        //        if (bulkType == "UNIDENTIFIED")
+        //        {
+        //            Logger.LogWarning($"File type not identified. BinaryFilePath={binaryFilePath}");
+        //            await HandleUnidentifiedFile(metadataFile, binaryFilePath, tempPath);
+        //        }
+
+        //        convertedDoc.bulkType = bulkType;
+        //        evnt = CreateBulkFileTypeEvent(metadataFile, bulkType, "UNIDENTIFIED");
+        //        await SendQMSMessage(evnt);
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        errorOccurred = true;
+        //        Logger?.LogError($"Exception occurred. S3Key={metadataS3Key}, S3Bucket={s3Bucket}, EntityId={metadataFile?.EntityID}, ProjectId={metadataFile?.ProjectID}, Error={ex}");
+
+        //        await SendSystemErrorAoc(metadataFile, new QmsErrorEventData
+        //        {
+        //            ErrorCode = "500",
+        //            ErrorMessage = "Exception occurred.",
+        //            Exception = ex,
+        //            FailedAt = currentProcessingStage
+        //        });
+        //    }
+        //    finally
+        //    {
+        //        result.Processed = !errorOccurred;
+        //        result.FailedAt = errorOccurred ? currentProcessingStage : null;
+        //        result.ConvertedDocument = convertedDoc;
+
+        //        CleanUp(binaryFilePath);
+        //        Logger?.LogInformation($"Cleaned up temp files. BinaryFilePath={binaryFilePath}, S3Bucket={s3Bucket}");
+        //    }
+
+        //    return result;
+        //}
+
+        //private async Task HandleUnidentifiedFile(MetadataFile metadataFile, string binaryFilePath, string tempPath)
+        //{
+        //    try
+        //    {
+        //        if (metadataFile?.Indexes != null)
+        //        {
+        //            var reportNameIndex = metadataFile.Indexes.FirstOrDefault(idx => idx.IndexName == "Report Name");
+        //            if (reportNameIndex != null)
+        //            {
+        //                reportNameIndex.IndexValue = "Missing";
+        //                Logger.LogInformation("Updated 'Report Name' index to 'Missing'.");
+        //            }
+        //            else
+        //            {
+        //                Logger.LogWarning("'Report Name' index not found in metadata.");
+        //            }
+        //        }
+
+
+        //        String OldDOCID = metadataFile.DocID;//old Doc ID
+
+
+        //        // Generate a new GUID-based filename
+        //        metadataFile.DocID = Guid.NewGuid().ToString();
+        //        metadataFile.ParentDocID = OldDOCID;// Assign old DocId to parentDocId
+
+        //        string newFileName = $"{metadataFile.DocID}.pdf";
+        //        string newFilePath = Path.Combine(tempPath, newFileName);
+
+
+        //        // Update s3Url in metadataFile to reflect new S3 location
+        //        string newS3Key = newFileName;//$"{metadataFile.DocID}.pdf";
+        //        string newS3Url = $"https://{Configuration.GetConvertedS3Bucket_UNIDENTIFIED()}.s3.us-east-2.amazonaws.com/{newS3Key}";
+        //        metadataFile.S3Key = newS3Key;
+        //        metadataFile.S3Url = newS3Url;
+
+        //        string updatedMetadataJson = JsonConvert.SerializeObject(metadataFile, Formatting.Indented);
+        //        string updatedMetadataFilePath = Path.Combine(tempPath, $"{metadataFile.DocID}.pdf.metadata");
+        //        await File.WriteAllTextAsync(updatedMetadataFilePath, updatedMetadataJson);
+
+        //        // Upload updated metadata file to S3
+        //        await UploadFileToS3(updatedMetadataFilePath, newS3Key + ".metadata");
+
+        //        // Upload binary file if it exists
+        //        if (File.Exists(binaryFilePath))
+        //        {
+        //            await UploadFileToS3(binaryFilePath, newS3Key);
+        //        }
+        //        else
+        //        {
+        //            Logger.LogError($"Original file not found at path: {binaryFilePath}");
+        //        }
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        Logger.LogError($"Error in HandleUnidentifiedFile: {ex.Message}", ex);
+        //    }
+
+        //       // Get PDF Page Count
+        //       int pageCount = GetPdfPageCount(binaryFilePath);
+        //      Logger.LogInformation($"PDF Page Count: {pageCount}");
+
+        //    //Missing QMS
+        //    EventBody evnt = ReportNameSubstitutedAsMissing(metadataFile, pageCount);
+        //    await SendQMSMessage(evnt);
+
+        //    //Upload Sucess QMS
+        //    var qmsMessageEventt = CreateFileProcessedEvent_Process(metadataFile);
+        //    await SendQMSMessage(qmsMessageEventt);
+
+        //    //UPLOAD SUCESS
+
+        //    var qmsMessageEventt_Upload = CreateFileProcessedEvent_N(metadataFile);
+        //    await SendQMSMessage(qmsMessageEventt_Upload);
+
+        //}
+        //..................
         protected async Task<ProcessedFileEntry> ProcessFile(string s3Bucket, string metadataS3Key)
         {
-            
-            Logger.LogInformation($"Starting spliiting The barcode File. ");
-            string currentProcessingStage = STAGE_STARTING;//track processing stage
+            Logger.LogInformation("Starting file processing.");
+            string currentProcessingStage = STAGE_STARTING;
 
-           
-
-            ProcessedFileEntry result = new ProcessedFileEntry();
-            ConvertedDocument ConvertedDocument = new ConvertedDocument();
+            var result = new ProcessedFileEntry();
+            var convertedDoc = new ConvertedDocument();
             MetadataFile metadataFile = null;
-            string binaryFilePath = String.Empty;
+            string binaryFilePath = string.Empty;
             bool errorOccurred = false;
-            
+
             try
             {
+                // Step 1: Download Metadata
+                currentProcessingStage = STAGE_S3_DOWNLOAD;
+                metadataFile = await ReadMetadataFile(s3Bucket, metadataS3Key);
 
-                currentProcessingStage = STAGE_S3_DOWNLOAD; //set stage - S3 downloading
-                metadataFile = await ReadMetadataFile(s3Bucket, metadataS3Key);//download and read metadata file
-
-                //create bulkfile in event
-                var evnt=CreateFileInEvent(metadataFile);
-                Logger.LogInformation($"Create bulkfile in event. ");
-                await SendQMSMessage(evnt);   
-
-                var tempPath = Configuration.GetTempPath();
-
-                binaryFilePath = await ReadBinaryFile(s3Bucket, metadataFile.S3Key, tempPath);//download XPS file
-
-                string bulkType = "UNIDENTIFIED";
-                Logger.LogDebug("Check if the file is readable or not. " + $"BinaryFilePath={binaryFilePath}");
-
-                // Set the license files
-                SetLicense();
-
-                bool isContainImages=CheckIfPdfContainsTextOrImages(binaryFilePath);
-                //Check file is Readable or non-readable
-                //bool isFileReadable = IsFIleReadable(binaryFilePath);
-
-                if (!isContainImages)
-                {
-                    bulkType = "BATCH";
-                }
-                if (isContainImages)
-                {
-                    bool iscontainbarcode = ContainsBarcodeInPDF(binaryFilePath);
-                    Logger.LogDebug($"Starting to identifing bulkFile" +
-                           $"s3Bucket={s3Bucket}," +
-                           $"metadataS3Key={metadataS3Key}");
-
-                    if (iscontainbarcode)
-                    {
-                        bulkType = "BARCODE";
-                    }
-                }
-                if (bulkType.Equals("UNIDENTIFIED"))
-                {
-                    Logger.LogWarning("File is not identified as a batch or barcode." + $"BinaryFilePath={binaryFilePath}");
-                }
-
-                //Logger.LogDebug($"Starting to identifing bulkFile" +
-                //       $"s3Bucket={s3Bucket}," +
-                //       $"BulkType={bulkType}," +
-                //       $"metadataS3Key={metadataS3Key}");
-
-                ConvertedDocument.bulkType = bulkType;
-
-
-                //QMS for bulk type
-                evnt = CreateBulkFileTypeEvent(metadataFile, bulkType, "BULK");
+                var evnt = CreateFileInEvent(metadataFile);
                 await SendQMSMessage(evnt);
 
-            }
+                string tempPath = Configuration.GetTempPath();
+                binaryFilePath = await ReadBinaryFile(s3Bucket, metadataFile.S3Key, tempPath);
 
-            catch (S3FileDownloadException ex)
-            {
-                errorOccurred = true;
+                SetLicense();
 
-                Logger?.LogError($"S3 file download error occurred. " +
-                    $"S3Key={metadataS3Key}," +
-                    $"S3Bucket={s3Bucket}," +
-                    $"Error={ex}");
+                // Step 2: Identify the file type
+                bool containsImages = CheckIfPdfContainsTextOrImages(binaryFilePath);
+                bool containsBarcodes = ContainsBarcodeInPDF(binaryFilePath);
+                bool matchesBatchPattern = CheckBatchReportPattern(binaryFilePath); // New check
 
-                //send qms aoc
-                var errrorData = new QmsErrorEventData()
+                string bulkType;
+                if (containsBarcodes)
                 {
-                    ErrorCode = "500",
-                    ErrorMessage = "S3 file download error occurred. ",
-                    Exception = ex,
-                    FailedAt = "S3UPLOADING"
-                };
-                await SendSystemErrorAoc(metadataFile, errrorData);
-            }
-            catch (ConvertingErrorException ex)
-            {
-                errorOccurred = true;
-
-                Logger?.LogError($"Error Occured When Converting." +
-                 $"S3Key={metadataS3Key}," +
-                 $"S3Bucket={s3Bucket}," +
-                 $"EntityId={metadataFile?.EntityID}," +
-                 $"ProjectId={metadataFile?.ProjectID}," +
-                 $"Error={ex}");
-
-                //send qms aoc
-                var errrorData = new QmsErrorEventData()
-                {
-                    ErrorCode = "500",
-                    ErrorMessage = "Error Occured When Converting.",
-                    Exception = ex,
-                    FailedAt = "CONVERTING"
-                };
-
-                var processedQmsMessageEvent = CreateFileProcessingErrorEvent(metadataFile, errrorData);//send File In qms message
-                await SendQMSMessage(processedQmsMessageEvent);
-                try
-                {
-                    Console.WriteLine(processedQmsMessageEvent.ToJson().ToString());
+                    bulkType = "BARCODE";
                 }
-                catch (Exception){}
-
-            }
-            catch (AppProcessingException ex)
-            {
-                errorOccurred = true;
-
-                Logger?.LogError($"App Processing Error occurred. " +
-                   $"S3Key={metadataS3Key}," +
-                   $"S3Bucket={s3Bucket}," +
-                   $"EntityId={metadataFile?.EntityID}," +
-                   $"ProjectId={metadataFile?.ProjectID}," +
-                   $"Error={ex}");
-
-                //send qms aoc
-                var errrorData = new QmsErrorEventData()
+                else if (containsImages)
                 {
-                    ErrorCode = "500",
-                    ErrorMessage = "App Processing Error occurred.  ",
-                    Exception = ex,
-                    FailedAt = "APP PROCESSING"
-                };
-                await SendSystemErrorAoc(metadataFile, errrorData);
+                    // Check if the PDF contains text-based report keywords
+                    bool isBatchReport = CheckBatchReportPattern(binaryFilePath);
 
-            }
-            catch (MissingMetadataException ex)
-            {
-                errorOccurred = true;
-
-                Logger?.LogError($"Cannot find Metadata files. " +
-                    $"S3Key={metadataS3Key}," +
-                    $"S3Bucket={s3Bucket}," +
-                    $"EntityId={metadataFile?.EntityID}," +
-                    $"ProjectId={metadataFile?.ProjectID}," +
-                    $"Error={ex}");
-
-                //send qms aoc
-                var errrorData = new QmsErrorEventData()
-                {
-                    ErrorCode = "500",
-                    ErrorMessage = "Cannot find Metadata files. ",
-                    Exception = ex,
-                    FailedAt = "METADATA PROCESSING"
-                };
-                await SendSystemErrorAoc(metadataFile, errrorData);
-            }
-           
-            catch (Exception ex)
-            {
-                errorOccurred = true;
-
-                Logger?.LogError($"Unidentified Exception Occured. " +
-                   $"S3Key={metadataS3Key}," +
-                   $"S3Bucket={s3Bucket}," +
-                   $"EntityId={metadataFile?.EntityID}," +
-                   $"ProjectId={metadataFile?.ProjectID}," +
-                   $"Error={ex}");
-
-                //send qms aoc
-                var errrorData = new QmsErrorEventData()
-                {
-                    ErrorCode = "500",
-                    ErrorMessage = "Unidentified Exception Occured.",
-                    Exception = ex,
-                    FailedAt = ""
-                };
-                await SendSystemErrorAoc(metadataFile, errrorData);
-            }
-            finally
-            {
-                if (errorOccurred)
-                {
-                    result.Processed = false;
-                    result.FailedAt = currentProcessingStage;
-
-                    Logger?.LogInformation($"Currant Process is failed. " +
-                       $"S3Key={metadataS3Key}," +
-                       $"S3Bucket={s3Bucket}," +
-                       $"EntityId={metadataFile?.EntityID}," +
-                       $"ProjectId={metadataFile?.ProjectID}");
+                    // If it's a report (batch pattern matches), classify as BATCH
+                    // Otherwise, classify as UNIDENTIFIED
+                    bulkType = isBatchReport ? "BATCH" : "UNIDENTIFIED";
                 }
                 else
                 {
-                    result.Processed = true;
-                    result.ConvertedDocument= ConvertedDocument;
+                    bulkType = "BATCH";
                 }
 
-                //clean up tempory files
-                CleanUp(binaryFilePath);
-                Logger?.LogInformation($"cleaned all temporary files. " +
-                       $"binaryFilePath={binaryFilePath}," + 
-                       $"S3Bucket={s3Bucket}," +
-                       $"EntityId={metadataFile?.EntityID}," +
-                       $"ProjectId={metadataFile?.ProjectID}");
+                Logger.LogInformation($"File classified as: {bulkType}");
 
+                // Step 3: Handle Unidentified Files
+                if (bulkType == "UNIDENTIFIED")
+                {
+                    Logger.LogWarning($"Unidentified file detected. BinaryFilePath={binaryFilePath}");
+                    await HandleUnidentifiedFile(metadataFile, binaryFilePath, tempPath);
+
+
+
+                }
+
+                // Step 4: Update and send QMS event
+                convertedDoc.bulkType = bulkType;
+                evnt = CreateBulkFileTypeEvent(metadataFile, bulkType, bulkType);
+                await SendQMSMessage(evnt);
+            }
+            catch (Exception ex)
+            {
+                errorOccurred = true;
+                Logger?.LogError($"Exception occurred. S3Key={metadataS3Key}, S3Bucket={s3Bucket}, Error={ex}");
+                await SendSystemErrorAoc(metadataFile, new QmsErrorEventData
+                {
+                    ErrorCode = "500",
+                    ErrorMessage = "Exception occurred.",
+                    Exception = ex,
+                    FailedAt = currentProcessingStage
+                });
+            }
+            finally
+            {
+                result.Processed = !errorOccurred;
+                result.FailedAt = errorOccurred ? currentProcessingStage : null;
+                result.ConvertedDocument = convertedDoc;
+
+                CleanUp(binaryFilePath);
+                Logger?.LogInformation($"Cleaned up temp files. BinaryFilePath={binaryFilePath}");
             }
 
             return result;
         }
+
+        string ExtractTextFromPDF(string filePath)
+        {
+            StringBuilder extractedText = new StringBuilder();
+
+            Document pdfDocument = new Document(filePath);
+            foreach (Page page in pdfDocument.Pages)
+            {
+                TextAbsorber textAbsorber = new TextAbsorber();
+                page.Accept(textAbsorber);
+                extractedText.Append(textAbsorber.Text);
+            }
+
+            return extractedText.ToString();
+        }
+
+
+        //bool CheckBatchReportPattern(string filePath)
+        //{
+        //    string fileText = ExtractTextFromPDF(filePath);
+        //    return fileText.Length > 10; // Only classify as batch if text has more than 50 characters
+        //}
+        bool CheckBatchReportPattern(string filePath)
+        {
+            string fileText = ExtractTextFromPDF(filePath);
+
+            if (string.IsNullOrWhiteSpace(fileText))
+            {
+                return false;
+            }
+
+            // Split text into lines and take the first 10 lines
+            string[] lines = fileText.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            string firstTenLines = string.Join(" ", lines.Take(10));
+
+            return firstTenLines.Length > 10; // Ensure it contains meaningful content
+        }
+
+
+        private async Task HandleUnidentifiedFile(MetadataFile metadataFile, string binaryFilePath, string tempPath)
+        {
+            try
+            {
+                if (metadataFile?.Indexes != null)
+                {
+                    var reportNameIndex = metadataFile.Indexes.FirstOrDefault(idx => idx.IndexName == "Report Name");
+                    if (reportNameIndex != null)
+                    {
+                        reportNameIndex.IndexValue = "Missing";
+                        Logger.LogInformation("Updated 'Report Name' index to 'Missing'.");
+                    }
+                    else
+                    {
+                        Logger.LogWarning("'Report Name' index not found in metadata.");
+                    }
+                }
+
+                // Assign ParentDocID and rename
+                string oldDocId = metadataFile.DocID;
+                metadataFile.ParentDocID = oldDocId;
+                metadataFile.DocID = Guid.NewGuid().ToString();
+
+                string newS3Key = $"{metadataFile.DocID}.pdf";
+                metadataFile.S3Key = newS3Key;
+                metadataFile.S3Url = $"https://{Configuration.GetConvertedS3Bucket_UNIDENTIFIED()}.s3.us-east-2.amazonaws.com/{newS3Key}";
+
+                // Save updated metadata
+                string updatedMetadataJson = JsonConvert.SerializeObject(metadataFile, Formatting.Indented);
+                string updatedMetadataFilePath = Path.Combine(tempPath, $"{metadataFile.DocID}.pdf.metadata");
+                await File.WriteAllTextAsync(updatedMetadataFilePath, updatedMetadataJson);
+
+                // Upload updated metadata file to S3
+                await UploadFileToS3(updatedMetadataFilePath, newS3Key + ".metadata");
+
+                // Upload binary file if it exists
+                if (File.Exists(binaryFilePath))
+                {
+                    await UploadFileToS3(binaryFilePath, newS3Key);
+                }
+                else
+                {
+                    Logger.LogError($"Original file not found at path: {binaryFilePath}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError($"Error in HandleUnidentifiedFile: {ex.Message}", ex);
+            }
+
+            // Send QMS messages
+            int pageCount = GetPdfPageCount(binaryFilePath);
+            Logger.LogInformation($"PDF Page Count: {pageCount}");
+
+            EventBody evnt = ReportNameSubstitutedAsMissing(metadataFile, pageCount);
+            await SendQMSMessage(evnt);
+
+            var qmsMessageEvent = CreateFileProcessedEvent_Process(metadataFile);
+            await SendQMSMessage(qmsMessageEvent);
+
+            var qmsMessageEventUpload = CreateFileProcessedEvent_N(metadataFile);
+            await SendQMSMessage(qmsMessageEventUpload);
+        }
+
+
+
+        private int GetPdfPageCount(string pdfPath)
+        {
+            using (Document pdfDocument = new Document(pdfPath))  // Aspose
+            {
+                return pdfDocument.Pages.Count;
+            }
+        }
+
+
+        protected virtual EventBody CreateFileProcessedEvent_N(MetadataFile metadataFile)
+        {
+            var eventSrc = Configuration.GetQmsEventSourceName();
+            var evb = EventBodyFactory.Create<ConverterFileUploadEventData>(EventLevel.INFO, eventSrc);
+            var evd = (ConverterFileUploadEventData)evb.Data;
+            evd.DocId = metadataFile?.DocID;
+            evd.ChainId = metadataFile?.ChainID;
+            evd.ParentDocId = metadataFile?.ParentDocID;
+            
+
+                evd.ReportList.Add(new IndexedReportDataElements
+                {
+                    DocId = metadataFile.DocID,
+                    ReportName = "MISSING",
+                    BusinessDate = metadataFile?.GetIndex(MetadataIndexName.BusinessDate)?.IndexValue ?? "",
+                });
+            
+            return evb;
+        }
+
+
+
+        protected virtual EventBody CreateFileProcessedEvent_Process(MetadataFile metadataFile)
+        {
+            var eventSrc = Configuration.GetQmsEventSourceName();
+            var evb = EventBodyFactory.Create<ConverterFileProcessedEventData>(EventLevel.INFO, eventSrc);
+            var evd = (ConverterFileProcessedEventData)evb.Data;
+            evd.DocId = metadataFile?.DocID;
+            evd.ChainId = metadataFile?.ChainID;
+            evd.ParentDocId = metadataFile?.ParentDocID;
+      
+                evd.ReportList.Add(new IndexedReportDataElements
+                {
+                    DocId = metadataFile.DocID,
+                    ReportName = "MISSING",
+                    BusinessDate = metadataFile?.GetIndex(MetadataIndexName.BusinessDate)?.IndexValue ?? "",
+                });
+            
+            return evb;
+        }
+
+        protected virtual EventBody ReportNameSubstitutedAsMissing(MetadataFile metadataFile, int pageCount)
+        {
+            var eventSrc = Configuration.GetQmsEventSourceName();
+            var evb = EventBodyFactory.Create<ConverterQcEventData>(EventLevel.WARN, eventSrc);
+            var evd = (ConverterQcEventData)evb.Data;
+            evd.QcType = ConverterQcEventData.QC_TYPE_FORMAT_SUBSTITUE_REPORT_NAME;
+            evd.DocId = metadataFile?.DocID;
+            evd.ChainId = metadataFile?.ChainID;
+            evd.ParentDocId = metadataFile?.ParentDocID;
+            evd.FileType = "BULK";
+            evd.BulkType = "UNIDENTIFIED";
+
+          
+                 evd.ReportList.Add(new FailuresReportDataElements
+                    {
+                        Page = pageCount, // Or any other relevant property
+                        IndexName = "Report Name",
+                        SubstitutedValue = "MISSING"
+                    });
+            
+            return evb;
+        }
+
+        private async Task UploadFileToS3(string filePath, string s3Key)
+        {
+            try
+            {
+                await UploadToS3(new LmdFileUploadRequest
+                {
+                    BucketName = Configuration.GetConvertedS3Bucket_UNIDENTIFIED(),
+                    S3Path = Configuration.GetConvertedS3Path(),
+                    FilePath = filePath,
+                    S3KeyForFile = s3Key
+                });
+
+                Logger.LogInformation($"File uploaded successfully to S3: {s3Key}");
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError($"Failed to upload {s3Key} to S3: {ex.Message}", ex);
+            }
+        }
+
+        //private async Task HandleUnidentifiedFile(MetadataFile metadataFile, string binaryFilePath, string tempPath)
+        //{
+        //    if (metadataFile?.Indexes != null)
+        //    {
+        //        var reportNameIndex = metadataFile.Indexes.FirstOrDefault(idx => idx.IndexName == "Report Name");
+        //        if (reportNameIndex != null)
+        //        {
+        //            reportNameIndex.IndexValue = "Missing";
+        //            Logger.LogInformation("Updated 'Report Name' index to 'Missing'.");
+        //        }
+        //        else
+        //        {
+        //            Logger.LogWarning("'Report Name' index not found in metadata.");
+        //        }
+
+        //        string updatedMetadataJson = JsonConvert.SerializeObject(metadataFile, Formatting.Indented);
+        //        string updatedMetadataFilePath = Path.Combine(tempPath, $"{metadataFile.DocID}.pdf.metadata");
+        //        await File.WriteAllTextAsync(updatedMetadataFilePath, updatedMetadataJson);
+
+        //        await UploadToS3(new LmdFileUploadRequest
+        //        {
+        //            BucketName = Configuration.GetConvertedS3Bucket_UNIDENTIFIED(),
+        //            S3Path = Configuration.GetConvertedS3Path(),
+        //            FilePath = updatedMetadataFilePath,
+        //            S3KeyForFile = $"{metadataFile.DocID}.pdf.metadata"
+        //        });
+
+        //        Logger.LogInformation("Metadata file uploaded.");
+        //    }
+
+        //    if (File.Exists(binaryFilePath))
+        //    {
+        //        await UploadToS3(new LmdFileUploadRequest
+        //        {
+        //            BucketName = Configuration.GetConvertedS3Bucket_UNIDENTIFIED(),
+        //            S3Path = Configuration.GetConvertedS3Path(),
+        //            FilePath = binaryFilePath,
+        //            S3KeyForFile = metadataFile.S3Key
+        //        });
+
+        //        Logger.LogInformation("Binary file uploaded.");
+        //    }
+        //    else
+        //    {
+        //        Logger.LogError($"Original file not found at path: {binaryFilePath}");
+        //    }
+        //}
+
+
+
+
+        //protected async Task<ProcessedFileEntry> ProcessFile(string s3Bucket, string metadataS3Key)
+        //{
+
+        //    Logger.LogInformation($"Starting spliiting The barcode File. ");
+        //    string currentProcessingStage = STAGE_STARTING;//track processing stage
+
+
+
+        //    ProcessedFileEntry result = new ProcessedFileEntry();
+        //    ConvertedDocument ConvertedDocument = new ConvertedDocument();
+        //    MetadataFile metadataFile = null;
+        //    string binaryFilePath = String.Empty;
+        //    bool errorOccurred = false;
+
+        //    try
+        //    {
+
+        //        currentProcessingStage = STAGE_S3_DOWNLOAD; //set stage - S3 downloading
+        //        metadataFile = await ReadMetadataFile(s3Bucket, metadataS3Key);//download and read metadata file
+
+        //        //create bulkfile in event
+        //        var evnt=CreateFileInEvent(metadataFile);
+        //        Logger.LogInformation($"Create bulkfile in event. ");
+        //        await SendQMSMessage(evnt);   
+
+        //        var tempPath = Configuration.GetTempPath();
+
+        //        binaryFilePath = await ReadBinaryFile(s3Bucket, metadataFile.S3Key, tempPath);//download XPS file
+
+        //        string bulkType = "UNIDENTIFIED";
+        //        Logger.LogDebug("Check if the file is readable or not. " + $"BinaryFilePath={binaryFilePath}");
+
+        //        // Set the license files
+        //        SetLicense();
+
+        //        bool isContainImages=CheckIfPdfContainsTextOrImages(binaryFilePath);
+        //        //Check file is Readable or non-readable
+        //        //bool isFileReadable = IsFIleReadable(binaryFilePath);
+
+        //        if (!isContainImages)
+        //        {
+        //            bulkType = "BATCH";
+        //        }
+        //        if (isContainImages)
+        //        {
+        //            bool iscontainbarcode = ContainsBarcodeInPDF(binaryFilePath);
+        //            Logger.LogDebug($"Starting to identifing bulkFile" +
+        //                   $"s3Bucket={s3Bucket}," +
+        //                   $"metadataS3Key={metadataS3Key}");
+
+        //            if (iscontainbarcode)
+        //            {
+        //                bulkType = "BARCODE";
+        //            }
+        //            //if (!iscontainbarcode) 
+        //            //{
+        //            //    bulkType = "BATCH";
+
+        //            //}
+        //        }
+        //        if (bulkType.Equals("UNIDENTIFIED"))
+        //        {
+        //            // Change the meta file index report name to "Missing"
+        //           // metadataFile.IndexReportName = "Missing";
+
+
+        //            Logger.LogWarning("File is not identified as a batch or barcode." + $"BinaryFilePath={binaryFilePath}");
+        //        }
+
+        //        //Logger.LogDebug($"Starting to identifing bulkFile" +
+        //        //       $"s3Bucket={s3Bucket}," +
+        //        //       $"BulkType={bulkType}," +
+        //        //       $"metadataS3Key={metadataS3Key}");
+
+        //        ConvertedDocument.bulkType = bulkType;
+
+
+        //        //QMS for bulk type
+        //        evnt = CreateBulkFileTypeEvent(metadataFile, bulkType, "BULK");
+        //        await SendQMSMessage(evnt);
+
+        //    }
+
+        //    catch (S3FileDownloadException ex)
+        //    {
+        //        errorOccurred = true;
+
+        //        Logger?.LogError($"S3 file download error occurred. " +
+        //            $"S3Key={metadataS3Key}," +
+        //            $"S3Bucket={s3Bucket}," +
+        //            $"Error={ex}");
+
+        //        //send qms aoc
+        //        var errrorData = new QmsErrorEventData()
+        //        {
+        //            ErrorCode = "500",
+        //            ErrorMessage = "S3 file download error occurred. ",
+        //            Exception = ex,
+        //            FailedAt = "S3UPLOADING"
+        //        };
+        //        await SendSystemErrorAoc(metadataFile, errrorData);
+        //    }
+        //    catch (ConvertingErrorException ex)
+        //    {
+        //        errorOccurred = true;
+
+        //        Logger?.LogError($"Error Occured When Converting." +
+        //         $"S3Key={metadataS3Key}," +
+        //         $"S3Bucket={s3Bucket}," +
+        //         $"EntityId={metadataFile?.EntityID}," +
+        //         $"ProjectId={metadataFile?.ProjectID}," +
+        //         $"Error={ex}");
+
+        //        //send qms aoc
+        //        var errrorData = new QmsErrorEventData()
+        //        {
+        //            ErrorCode = "500",
+        //            ErrorMessage = "Error Occured When Converting.",
+        //            Exception = ex,
+        //            FailedAt = "CONVERTING"
+        //        };
+
+        //        var processedQmsMessageEvent = CreateFileProcessingErrorEvent(metadataFile, errrorData);//send File In qms message
+        //        await SendQMSMessage(processedQmsMessageEvent);
+        //        try
+        //        {
+        //            Console.WriteLine(processedQmsMessageEvent.ToJson().ToString());
+        //        }
+        //        catch (Exception){}
+
+        //    }
+        //    catch (AppProcessingException ex)
+        //    {
+        //        errorOccurred = true;
+
+        //        Logger?.LogError($"App Processing Error occurred. " +
+        //           $"S3Key={metadataS3Key}," +
+        //           $"S3Bucket={s3Bucket}," +
+        //           $"EntityId={metadataFile?.EntityID}," +
+        //           $"ProjectId={metadataFile?.ProjectID}," +
+        //           $"Error={ex}");
+
+        //        //send qms aoc
+        //        var errrorData = new QmsErrorEventData()
+        //        {
+        //            ErrorCode = "500",
+        //            ErrorMessage = "App Processing Error occurred.  ",
+        //            Exception = ex,
+        //            FailedAt = "APP PROCESSING"
+        //        };
+        //        await SendSystemErrorAoc(metadataFile, errrorData);
+
+        //    }
+        //    catch (MissingMetadataException ex)
+        //    {
+        //        errorOccurred = true;
+
+        //        Logger?.LogError($"Cannot find Metadata files. " +
+        //            $"S3Key={metadataS3Key}," +
+        //            $"S3Bucket={s3Bucket}," +
+        //            $"EntityId={metadataFile?.EntityID}," +
+        //            $"ProjectId={metadataFile?.ProjectID}," +
+        //            $"Error={ex}");
+
+        //        //send qms aoc
+        //        var errrorData = new QmsErrorEventData()
+        //        {
+        //            ErrorCode = "500",
+        //            ErrorMessage = "Cannot find Metadata files. ",
+        //            Exception = ex,
+        //            FailedAt = "METADATA PROCESSING"
+        //        };
+        //        await SendSystemErrorAoc(metadataFile, errrorData);
+        //    }
+
+        //    catch (Exception ex)
+        //    {
+        //        errorOccurred = true;
+
+        //        Logger?.LogError($"Unidentified Exception Occured. " +
+        //           $"S3Key={metadataS3Key}," +
+        //           $"S3Bucket={s3Bucket}," +
+        //           $"EntityId={metadataFile?.EntityID}," +
+        //           $"ProjectId={metadataFile?.ProjectID}," +
+        //           $"Error={ex}");
+
+        //        //send qms aoc
+        //        var errrorData = new QmsErrorEventData()
+        //        {
+        //            ErrorCode = "500",
+        //            ErrorMessage = "Unidentified Exception Occured.",
+        //            Exception = ex,
+        //            FailedAt = ""
+        //        };
+        //        await SendSystemErrorAoc(metadataFile, errrorData);
+        //    }
+        //    finally
+        //    {
+        //        if (errorOccurred)
+        //        {
+        //            result.Processed = false;
+        //            result.FailedAt = currentProcessingStage;
+
+        //            Logger?.LogInformation($"Currant Process is failed. " +
+        //               $"S3Key={metadataS3Key}," +
+        //               $"S3Bucket={s3Bucket}," +
+        //               $"EntityId={metadataFile?.EntityID}," +
+        //               $"ProjectId={metadataFile?.ProjectID}");
+        //        }
+        //        else
+        //        {
+        //            result.Processed = true;
+        //            result.ConvertedDocument= ConvertedDocument;
+        //        }
+
+        //        //clean up tempory files
+        //        CleanUp(binaryFilePath);
+        //        Logger?.LogInformation($"cleaned all temporary files. " +
+        //               $"binaryFilePath={binaryFilePath}," + 
+        //               $"S3Bucket={s3Bucket}," +
+        //               $"EntityId={metadataFile?.EntityID}," +
+        //               $"ProjectId={metadataFile?.ProjectID}");
+
+        //    }
+
+        //    return result;
+        //}
 
         public void SetLicense()
         {
@@ -676,6 +1242,51 @@ namespace BulkFileIdentificationHandler.Core.App
         #endregion
 
         #region S3 Upload
+
+        protected async virtual Task<LmdFileUploadResponse> UploadToS3(LmdFileUploadRequest lmdFileUploadRequest)
+        {
+            try
+            {
+                var s3Client = new MDO2.Core.LMD.S3.S3Client(AmazonS3Client);
+                var response = await s3Client.UploadLMDFileAsync(lmdFileUploadRequest);
+                if (response.ResponseCode == System.Net.HttpStatusCode.OK)
+                {
+                    Logger.LogDebug($"File uploaded. " +
+                        $"S3Key={response.BinaryFileKey}," +
+                        //$"MetadataS3Key={response.MetadataFileKey}," +
+                        $"Bucket={lmdFileUploadRequest.BucketName}," +
+                        $"SourceFilePath={lmdFileUploadRequest.FilePath}");
+
+                    return response;
+                }
+                else
+                {
+                    throw new FileUploadException($"S3 service returned error while uploading file to Tempory S3 path. " +
+                        $"HttpCode={response.ResponseCode}" +
+                        $"S3Key={lmdFileUploadRequest.S3KeyForFile}," +
+                        $"Bucket={lmdFileUploadRequest.BucketName}," +
+                        $"SubPath={lmdFileUploadRequest.S3Path}," +
+                        $"SourceFilePath={lmdFileUploadRequest.FilePath}");
+                }
+            }
+            catch (Exception ex)
+            {
+                throw new FileUploadException($"Error occurred while uploading file to Tempory S3 path. " +
+                    $"S3Key={lmdFileUploadRequest.S3KeyForFile}," +
+                    $"Bucket={lmdFileUploadRequest.BucketName}," +
+                    $"SubPath={lmdFileUploadRequest.S3Path}," +
+                    $"SourceFilePath={lmdFileUploadRequest.FilePath}", ex);
+            }
+        }
+        protected virtual string CreateNewS3Key(string docId, string filePath)
+        {
+            //try to find the extension 
+            var extension = Path.GetExtension(filePath) ?? "";
+            var NewFilePath = Configuration.GetConvertedS3Path();
+            return $"{NewFilePath}{docId}.{extension.Trim('.')}";
+        }
+
+
         #endregion
         public abstract Task<object> Run(object input);
         public IConfigurationRoot Configuration { get; }

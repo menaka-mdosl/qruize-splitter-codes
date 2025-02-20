@@ -13,6 +13,8 @@ namespace QruizeBulkFileSQSReceiver
         public const string CFG_KEY_ARN_STEP_FUNCTION = "ARN_STEP_FUNCTION";
         public const string CFG_KEY_QMS_EVENT_SOURCE_NAME = "QMS_EVENT_SOURCE_NAME";
         public const string CFG_KEY_QMS_EVENT_SOURCE_ARN = "QMS_EVENT_SOURCE_ARN";
-
+        public const string SQS_URL = "FILE_IN_SQS_URL";
+        public const string DLQ_SQS_URL = "DLQ_SQS_URL";
+        public const string MaxNumberOfMessages = "MAXNUMBER_OF_MESSAGE";
     }
 }
