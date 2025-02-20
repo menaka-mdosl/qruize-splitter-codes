@@ -51,5 +51,40 @@ namespace QruizeBulkFileSQSReceiver
                 return entSource;
             }
         }
+
+        public static string GetSQSURL(this IConfiguration configuration)
+        {
+            var URL = configuration.GetValue<string>(AppConstants.SQS_URL);
+            if (string.IsNullOrWhiteSpace(URL))
+                return "";
+            else
+            {
+                return URL;
+            }
+        }
+        public static string GetDLQSQSURL(this IConfiguration configuration)
+        {
+            var URL = configuration.GetValue<string>(AppConstants.DLQ_SQS_URL);
+            if (string.IsNullOrWhiteSpace(URL))
+                return "";
+            else
+            {
+                return URL;
+            }
+        }
+
+        public static int GetMaxNumberOfMessages(this IConfiguration configuration)
+        {
+            var message = configuration.GetValue<string>(AppConstants.MaxNumberOfMessages);
+
+            if (int.TryParse(message, out int maxMessages))
+            {
+                return maxMessages;
+            }
+
+            return 10;
+        }
+
+
     }
 }

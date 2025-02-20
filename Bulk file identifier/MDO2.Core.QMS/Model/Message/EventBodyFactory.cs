@@ -61,7 +61,7 @@ namespace MDO2.Core.QMS.Model.Message
                     EventLevel = eventLevel,
                     EventSource = eventSource,
                     EventTime = DateTime.UtcNow,
-                    EventType = eventType ?? "CONV_FILE_PROCESSED",
+                    EventType = eventType ?? "BULK_FILE_PROCESSED",
                     Data = (ConverterFileProcessedEventData)Activator.CreateInstance(typeof(ConverterFileProcessedEventData))
                 };
                 return evb;
@@ -73,7 +73,7 @@ namespace MDO2.Core.QMS.Model.Message
                     EventLevel = eventLevel,
                     EventSource = eventSource,
                     EventTime = DateTime.UtcNow,
-                    EventType = eventType ?? "CONV_FILE_PROCESSING_ERROR",
+                    EventType = eventType ?? "BULK_FILE_PROCESSING_ERROR",
                     Data = (ConverterFileProcessingErrorEventData)Activator.CreateInstance(typeof(ConverterFileProcessingErrorEventData))
                 };
                 return evb;
@@ -85,7 +85,7 @@ namespace MDO2.Core.QMS.Model.Message
                     EventLevel = eventLevel,
                     EventSource = eventSource,
                     EventTime = DateTime.UtcNow,
-                    EventType = eventType ?? "CONV_FILE_PROCESSED_UPLOAD",
+                    EventType = eventType ?? "BULK_FILE_PROCESSED_UPLOAD",
                     Data = (ConverterFileUploadEventData)Activator.CreateInstance(typeof(ConverterFileUploadEventData))
                 };
                 return evb;

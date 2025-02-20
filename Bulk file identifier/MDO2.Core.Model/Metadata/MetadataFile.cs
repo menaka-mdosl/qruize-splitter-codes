@@ -120,6 +120,8 @@ namespace MDO2.Core.Model.Metadata
         [JsonProperty("indexes")]
         public MetadataIndexCollection Indexes { get; set; }
 
+        public string Source { get; set; }
+
         public object Clone()
         {
             var jsonStr = Newtonsoft.Json.JsonConvert.SerializeObject(this);

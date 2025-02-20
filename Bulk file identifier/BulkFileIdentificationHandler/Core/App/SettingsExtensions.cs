@@ -33,6 +33,28 @@ namespace BulkFileIdentificationHandler.Core.App
             }
         }
 
+        public static string GetConvertedS3Bucket_UNIDENTIFIED(this IConfigurationRoot configuration)
+        {
+            var configValue = configuration.GetValue<string>(AppConstants.CFG_KEY_CONVERTED_S3_PATH_UNIDENTIFIED);
+            if (string.IsNullOrWhiteSpace(configValue))
+                return "";
+            else
+            {
+                return configValue;
+            }
+        }
+        public static string GetSQSURL(this IConfiguration configuration)
+        {
+            var URL = configuration.GetValue<string>(AppConstants.SQS_URL);
+            if (string.IsNullOrWhiteSpace(URL))
+                return "";
+            else
+            {
+                return URL;
+            }
+        }
+
+
         //internal static string GetSmApiUrl(this IConfigurationRoot configuration)
         //{
         //    var smBaseUrl = configuration.GetValue<string>(AppConstants.SM_API_BASE_URL);

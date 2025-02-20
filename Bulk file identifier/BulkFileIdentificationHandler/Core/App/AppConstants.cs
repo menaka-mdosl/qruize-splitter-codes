@@ -32,6 +32,13 @@
         //metadata extention
         public const string CFG_KEY_CONVERTED_METADATA_EXTENSION = "CONVERTED_METADATA_EXTENSION";
 
+        //bucket name to UNIDENTIFIED files
+        public const string CFG_KEY_CONVERTED_S3_PATH_UNIDENTIFIED = "CONVERTED_S3_BUCKET_FOR_UNIDENTIFIED";
+
+        public const string SQS_URL = "FILE_IN_SQS_URL";
+
+
+
 
     }
 }

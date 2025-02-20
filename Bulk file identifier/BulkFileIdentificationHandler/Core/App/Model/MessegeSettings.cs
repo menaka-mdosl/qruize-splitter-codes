@@ -28,6 +28,9 @@ namespace BulkFileIdentificationHandler.Core.App.Model
         public bool processed { get; set; }
         public string bulkType { get; set; }
 
+
+        public string receiptHandle { get; set; }
+
     }
 
 }
