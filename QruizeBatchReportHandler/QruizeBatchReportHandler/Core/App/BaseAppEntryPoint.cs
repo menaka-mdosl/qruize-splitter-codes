@@ -27,6 +27,8 @@ using static System.Net.Mime.MediaTypeNames;
 using System.Text;
 using System.Xml.Linq;
 
+
+
 namespace QruizeBatchReportHandler.Core.App
 {
     internal abstract class BaseAppEntryPoint<T> : IAppEntryPoint
@@ -97,15 +99,19 @@ namespace QruizeBatchReportHandler.Core.App
             evd.FileType = "BULK";
             evd.BulkType = "BATCH";
             foreach(var page in matchedReport) {
-                if (page.ReportName.Equals("MISSING"))
-                {
-                    evd.ReportList.Add(new FailuresReportDataElements
+             
+                    if (page.ReportName.Equals("MISSING"))
                     {
-                        Page = page.page,
-                        IndexName = "Report Name",
-                        SubstitutedValue = "MISSING"
-                    });
-                }
+                        evd.ReportList.Add(new FailuresReportDataElements
+                        {
+                            Page = page.page,
+                            IndexName = "Report Name",
+                            SubstitutedValue = "MISSING"
+                        });
+
+                        // Print details
+                        Console.WriteLine($"Page: {page.page}, IndexName: Report Name, SubstitutedValue: MISSING");
+                    }             
             }
             
             return evb;
@@ -137,6 +143,47 @@ namespace QruizeBatchReportHandler.Core.App
             evd.BusinessDate = metadataFile?.GetIndex(MetadataIndexName.BusinessDate)?.IndexValue;
             return evb;
         }
+
+        protected virtual EventBody BULK_FILE_TYPE(MetadataFile metadataFile)
+        {
+            var eventSrc = Configuration.GetQmsEventSourceName();
+            var evb = EventBodyFactory.Create<FileidentifiedEventData>(EventLevel.INFO, eventSrc);
+            var evd = (FileidentifiedEventData)evb.Data;
+            evd.DocId = metadataFile?.DocID;
+            evd.ChainId = metadataFile?.ChainID;
+            evd.ParentDocId = metadataFile?.ParentDocID;
+            evd.Hotel = metadataFile?.GetIndex(MetadataIndexName.Hotels)?.IndexValue;
+            evd.MgmtGroup = metadataFile?.GetIndex(MetadataIndexName.ManagementGroup)?.IndexValue;
+            evd.BusinessDate = metadataFile?.GetIndex(MetadataIndexName.BusinessDate)?.IndexValue;
+            evd.FileType = "BULK";
+            evd.BulkType = "BATCH";
+
+            return evb;
+        }
+
+
+        protected virtual EventBody CreateFileProcessedEvent_Process(MetadataFile metadataFile, List<IndexedDocumentDetails> convertedDocs)
+        {
+            var eventSrc = Configuration.GetQmsEventSourceName();
+            var evb = EventBodyFactory.Create<ConverterFileProcessedEventData>(EventLevel.INFO, eventSrc);
+            var evd = (ConverterFileProcessedEventData)evb.Data;
+            evd.DocId = metadataFile?.DocID;
+            evd.ChainId = metadataFile?.ChainID;
+            evd.ParentDocId = metadataFile?.ParentDocID;
+            foreach (var indexedDoc in convertedDocs)
+            {
+                //Console.WriteLine($"Processing IndexedDoc - NewDocId: {indexedDoc.NewDocId}, ReportName: {indexedDoc.ReportName}");
+
+                evd.ReportList.Add(new IndexedReportDataElements
+                {
+                    DocId = indexedDoc.NewDocId,
+                    ReportName = indexedDoc.ReportName,
+                    BusinessDate = metadataFile?.GetIndex(MetadataIndexName.BusinessDate)?.IndexValue ?? "",
+                });
+            }
+            return evb;
+        }
+
         protected virtual EventBody CreateFileProcessedEvent(MetadataFile metadataFile, List<IndexedDocumentDetails> indexedDocs)
         {
             var eventSrc = Configuration.GetQmsEventSourceName();
@@ -478,6 +525,50 @@ namespace QruizeBatchReportHandler.Core.App
                                             break;
                                         }
                                     }
+                                    //...
+                                    foreach (var reportName in sortedReportNames)
+                                    {
+                                        // Escape any special characters (like parentheses) in the report name
+                                        string escapedReportName = Regex.Escape(reportName);
+
+                                        // Check if the extracted portion matches the report name with possible line breaks or spaces
+                                        if (Regex.IsMatch(extractedPortion, $"{escapedReportName}(\\r\\n|\\r|\\n|  )", RegexOptions.IgnoreCase))
+                                        {
+                                            pageReportMatch.Add(new ReportMatchedDetails
+                                            {
+                                                page = pageNumber + 1,
+                                                ReportName = reportName,
+                                                PageData = page,
+                                                PageExreactedData = extractedPortion
+                                            });
+                                            isMatched = true;
+                                            break;
+                                        }
+                                        else if (Regex.IsMatch(extractedPortion, $"{escapedReportName}(\\r\\n|\\r|\\n| )", RegexOptions.IgnoreCase))
+                                        {
+                                            pageReportMatch.Add(new ReportMatchedDetails
+                                            {
+                                                page = pageNumber + 1,
+                                                ReportName = reportName,
+                                                PageData = page,
+                                                PageExreactedData = extractedPortion
+                                            });
+                                            isMatched = true;
+                                            break;
+                                        }
+                                        else if (Regex.IsMatch(extractedPortion, $"{escapedReportName}", RegexOptions.IgnoreCase))
+                                        {
+                                            pageReportMatch.Add(new ReportMatchedDetails
+                                            {
+                                                page = pageNumber + 1,
+                                                ReportName = reportName,
+                                                PageData = page,
+                                                PageExreactedData = extractedPortion
+                                            });
+                                            isMatched = true;
+                                            break;
+                                        }
+                                    }
 
 
 
@@ -491,7 +582,7 @@ namespace QruizeBatchReportHandler.Core.App
                                     //    {
                                     //        macthedRptName.Add(reportName);
                                     //    }
- 
+
 
                                     //    //bool isReportNameInAnotherReport = false;
                                     //    //foreach (var rptNme in splittingDocuments[0].ReportNames)
@@ -707,11 +798,27 @@ namespace QruizeBatchReportHandler.Core.App
 
                 if (indexingDocuments.Count > 0)
                 {
-                    var substititionWords = indexingDocuments[0].SubstitutionWords;
+
+                    var substititionWords = new Dictionary<string, string>();
+                    try
+                    {
+                        substititionWords = indexingDocuments[0].SubstitutionWords ?? new Dictionary<string, string>();
+                    }
+                    catch (Exception e)
+                    {
+                        Logger.LogWarning($"Error deserializing SubstitutionWords: {e.Message}");
+                    }
+
+
+
+                    // var substititionWords = indexingDocuments[0].SubstitutionWords;
                     var indexReportNames = indexingDocuments[0].ReportNames;
                     string expectedDateFormat = indexingDocuments[0].ExpectedDateFormat;
                     string outputDateFormat = indexingDocuments[0].OutputDateFormat;
-                    int extractLineCountIndex = 4; //Default Line count
+                    //int extractLineCountIndex = 4; //Default Line count
+                    int extractLineCountIndex = indexingDocuments[0].FetchNLines != null ?
+                            Convert.ToInt32(indexingDocuments[0].FetchNLines) : 4;
+
                     try
                     {
                         extractLineCountIndex = Convert.ToInt32(indexingDocuments[0].FetchNLines);
@@ -863,6 +970,7 @@ namespace QruizeBatchReportHandler.Core.App
                 throw;
             }
         }
+
 
         protected virtual string OcrNonReadablePage(string ImagePath)
         {
@@ -1142,7 +1250,7 @@ namespace QruizeBatchReportHandler.Core.App
         protected async Task<ProcessedFileEntry> ProcessFile(string s3Bucket, string metadataS3Key)
         {
 
-            Logger.LogInformation($"Starting spliiting The barcode File. ");
+            Logger.LogInformation($"Starting spliiting The Batch File. ");
             string currentProcessingStage = STAGE_START;//track processing stage
 
             ProcessedFileEntry result = new ProcessedFileEntry();
@@ -1159,6 +1267,18 @@ namespace QruizeBatchReportHandler.Core.App
 
                 metadataFile = await ReadMetadataFile(s3Bucket, metadataS3Key);//download and read metadata file
 
+                // Create and print the first event
+                var qmsMessageEvent = CreateFileInEvent(metadataFile);
+              //  Console.WriteLine("QMS File In Event:");
+                //Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(qmsMessageEvent, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+                await SendQMSMessage(qmsMessageEvent);
+
+                // Create and print the second event
+                var qmsMessageEvent_Type = BULK_FILE_TYPE(metadataFile);
+                //Console.WriteLine("QMS Bulk File Type Event:");
+                //Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(qmsMessageEvent_Type, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+                await SendQMSMessage(qmsMessageEvent_Type);
+
                 ////var qmsMessageEvent = CreateFileInEvent(metadataFile);//send File In qms message
                 //await SendQMSMessage(qmsMessageEvent);
                 ////try{Console.WriteLine(qmsMessageEvent.ToJson().ToString());}catch (Exception){}
@@ -1174,12 +1294,15 @@ namespace QruizeBatchReportHandler.Core.App
                 currentProcessingStage = STAGE_FILE_SPLITING;
                 var splittedDocument = DoSplit(binaryFilePath, tempPath, splittingDocuments);
 
+             
+
+                currentProcessingStage = STAGE_FILE_INDEXING;
+                var indexedReports = ReportIndexing(splittedDocument, indexingDocuments, tempPath, binaryFilePath);
+
                 //Missing QMS
                 EventBody evnt = ReportNameSubstitutedAsMissing(metadataFile, splittedDocument);
                 await SendQMSMessage(evnt);
 
-                currentProcessingStage = STAGE_FILE_INDEXING;
-                var indexedReports = ReportIndexing(splittedDocument, indexingDocuments, tempPath, binaryFilePath);
 
                 // - save in the s3 bucket
                 var failedItems = new List<UploadFailure>();
@@ -1196,6 +1319,7 @@ namespace QruizeBatchReportHandler.Core.App
                             if (indexedDoc.ReportName.Equals("MISSING"))
                             {
                                 newReportName = metadataFile.GetIndex(MetadataIndexName.ReportName)?.IndexValue ?? "";
+                              
                             }
                         }
                         string newS3KeyPath = "";
@@ -1235,6 +1359,8 @@ namespace QruizeBatchReportHandler.Core.App
                             newS3Key = newS3KeyPath,
                             newS3Bucket = Configuration.GetConvertedS3Bucket(),
                             processed = true,
+
+                            //receiptHandle = result.receiptHandle,
                         });
 
                         //Clean up temp splitted files
@@ -1257,8 +1383,17 @@ namespace QruizeBatchReportHandler.Core.App
 
 
                 //QMS Processed Event
-                var qmsMessageEvent = CreateFileProcessedEvent(metadataFile, indexedReports);
-                await SendQMSMessage(qmsMessageEvent);
+                var qmsMessageEventz = CreateFileProcessedEvent(metadataFile, indexedReports);
+               // Console.WriteLine("QMS Processed Event (CreateFileProcessedEvent):");
+                //Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(qmsMessageEventz, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+                await SendQMSMessage(qmsMessageEventz);
+
+
+                //var qmsMessageEventt = CreateFileProcessedEvent_Process(metadataFile, indexedReports);
+                //Console.WriteLine("QMS Processed Event (CreateFileProcessedEvent_Process):");
+                //Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(qmsMessageEventt, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+                //await SendQMSMessage(qmsMessageEventt);
+
 
 
                 if (failedItems.Count != 0)

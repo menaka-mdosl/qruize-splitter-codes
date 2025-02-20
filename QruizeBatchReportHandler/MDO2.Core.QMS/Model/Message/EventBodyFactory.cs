@@ -38,11 +38,24 @@ namespace MDO2.Core.QMS.Model.Message
                     EventLevel = eventLevel,
                     EventSource = eventSource,
                     EventTime = DateTime.UtcNow,
-                    EventType = eventType ?? "CONV_FILE_IN",
+                    EventType = eventType ?? "BULK_FILE_IN",
                     Data = (ConverterFileInEventData)Activator.CreateInstance(typeof(ConverterFileInEventData))
                 };
                 return evb;
             }
+            else if (typeof(T) == typeof(FileidentifiedEventData))
+            {
+                var evb = new EventBody()
+                {
+                    EventLevel = eventLevel,
+                    EventSource = eventSource,
+                    EventTime = DateTime.UtcNow,
+                    EventType = eventType ?? "BULK_FILE_TYPE",
+                    Data = (FileidentifiedEventData)Activator.CreateInstance(typeof(FileidentifiedEventData))
+                };
+                return evb;
+            }
+
             else if (typeof(T) == typeof(ConverterFileProcessedEventData))
             {
                 var evb = new EventBody()
@@ -74,7 +87,7 @@ namespace MDO2.Core.QMS.Model.Message
                     EventLevel = eventLevel,
                     EventSource = eventSource,
                     EventTime = DateTime.UtcNow,
-                    EventType = eventType ?? "CONV_FILE_PROCESSED_UPLOAD",
+                    EventType = eventType ?? "BULK_FILE_PROCESSED_UPLOAD",
                     Data = (ConverterFileUploadEventData)Activator.CreateInstance(typeof(ConverterFileUploadEventData))
                 };
                 return evb;

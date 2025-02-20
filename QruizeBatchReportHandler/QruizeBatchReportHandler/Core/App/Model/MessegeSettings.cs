@@ -27,6 +27,8 @@ namespace QruizeBatchReportHandler.Core.App.Model
         public string newS3Bucket { get; set; }
         public bool processed { get; set; }
 
+
+        public string receiptHandle { get; set; }
     }
 
 }

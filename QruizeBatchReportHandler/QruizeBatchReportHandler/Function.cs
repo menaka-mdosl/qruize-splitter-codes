@@ -65,25 +65,80 @@ namespace QruizeBatchReportHandler
         /// <param name="evnt"></param>
         /// <param name="context"></param>
         /// <returns></returns>
-        
-        public async Task <JsonArray> FunctionHandler(JsonObject jsonEvnt, ILambdaContext context)
+
+        //public async Task <JsonArray> FunctionHandler(JsonObject jsonEvnt, ILambdaContext context)
+        //{
+
+        //    var EventData = JsonConvert.DeserializeObject<MessegeSettings>(jsonEvnt.ToString());// deserialize the json object
+        //    logger?.LogInformation($"Received Step Function trigger. Entries={EventData}");
+
+
+        //    var receiptHandle = jsonEvnt["receiptHandle"]?.ToString(); // Extract the receiptHandle if it exists
+        //    if (receiptHandle != null)
+        //    {
+        //        logger?.LogInformation($"Received receiptHandle: {receiptHandle}");
+        //    }
+        //    else
+        //    {
+        //        logger?.LogInformation("ReceiptHandle not found in the incoming event.");
+        //    }
+
+
+
+        //    var app = Startup.ServiceProvider.GetRequiredService<SFAppEntryPoint>();
+        //    var result = await app.Run(EventData);//run the main event
+
+
+        //    string json = JsonConvert.SerializeObject(result);//serialize the final data
+
+        //    var jsonObject =  JsonObject.Parse(json);// Parse JSON string to JsonObject
+        //    JArray jsonArray = JArray.Parse(json);
+
+        //    // JsonArray jsonArray = JsonSerializer.Deserialize<JsonArray>(json);
+        //    //var jsonObject = JsonArray.Parse(json);
+        //    return (JsonArray)jsonObject;
+
+        //}
+        public async Task<JsonArray> FunctionHandler(JsonObject jsonEvnt, ILambdaContext context)
         {
-            
-            var EventData = JsonConvert.DeserializeObject<MessegeSettings>(jsonEvnt.ToString());// deserialize the json object
+            var EventData = JsonConvert.DeserializeObject<MessegeSettings>(jsonEvnt.ToString());// Deserialize the JSON object
             logger?.LogInformation($"Received Step Function trigger. Entries={EventData}");
 
-            var app = Startup.ServiceProvider.GetRequiredService<SFAppEntryPoint>();
-            var result = await app.Run(EventData);//run the main event
+            var receiptHandle = jsonEvnt["receiptHandle"]?.ToString(); // Extract the receiptHandle if it exists
+            if (receiptHandle != null)
+            {
+                logger?.LogInformation($"Received receiptHandle: {receiptHandle}");
+            }
+            else
+            {
+                logger?.LogInformation("ReceiptHandle not found in the incoming event.");
+            }
 
-            string json = JsonConvert.SerializeObject(result);//serialize the final data
-            
-            var jsonObject =  JsonObject.Parse(json);// Parse JSON string to JsonObject
+            var app = Startup.ServiceProvider.GetRequiredService<SFAppEntryPoint>();
+            var result = await app.Run(EventData); // Run the main event
+
+            // Convert the result to a JSON string
+            string json = JsonConvert.SerializeObject(result);
+
+            // Parse JSON as JArray (Newtonsoft.Json)
             JArray jsonArray = JArray.Parse(json);
 
-            // JsonArray jsonArray = JsonSerializer.Deserialize<JsonArray>(json);
-            //var jsonObject = JsonArray.Parse(json);
-            return (JsonArray)jsonObject;
-            
+            // Add receiptHandle to each item in the JSON array
+            foreach (var item in jsonArray)
+            {
+                if (item is JObject obj)
+                {
+                    obj["receiptHandle"] = receiptHandle;
+                }
+            }
+
+            // Convert back to System.Text.Json.JsonArray
+            var jsonArrayString = jsonArray.ToString();
+            var finalJsonArray = JsonNode.Parse(jsonArrayString) as JsonArray;
+
+            return finalJsonArray!;
         }
+
+
     }
 }

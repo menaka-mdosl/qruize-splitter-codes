@@ -40,11 +40,14 @@ namespace QruizeBatchReportHandler.Core.App
             evnt.newS3Bucket = result.ConvertedDocument.ConvertedBucketName;
             evnt.newS3Key = result.ConvertedDocument.NewS3Key;
             evnt.processed = result.Processed;
+            evnt.receiptHandle = evnt.receiptHandle;
+       
 
             if (!result.Processed)
             {
                 throw new AppProcessingException("Error occurred while processing ");
             }
+
 
             return result.ProcessEvent;
         }

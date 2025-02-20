@@ -78,6 +78,18 @@ namespace QruizeBatchReportHandler.Core.Data
             if (pmsMatch != null && pmsMatch.Any())
                 return await Task.FromResult(pmsMatch);
 
+
+            //
+
+            var mnghotel = filteredDocuments.AsQueryable().Where(d =>
+              d.Hotel.ToLower() == hotelsearchValue && d.PMS.ToLower() == "*" && d.ManagementGroup.ToLower() == mgmtGrpSearchValue).ToList();
+
+            if (mnghotel != null && mnghotel.Any())
+                return await Task.FromResult(mnghotel);
+
+
+            //
+
             var managementGroupMatch = filteredDocuments.AsQueryable().Where(d =>
                 d.Hotel.ToLower() == "*" && d.PMS.ToLower() == "*" && d.ManagementGroup.ToLower() == mgmtGrpSearchValue).ToList();
 
@@ -106,6 +118,18 @@ namespace QruizeBatchReportHandler.Core.Data
 
             var exactMatch = filteredDocuments.AsQueryable().Where(d =>
             d.Hotel.ToLower() == hotelsearchValue && d.PMS.ToLower() == pmsSearchValue && d.ManagementGroup.ToLower() == mgmtGrpSearchValue).ToList();
+
+            //
+
+            var mnghotel = filteredDocuments.AsQueryable().Where(d =>
+              d.Hotel.ToLower() == hotelsearchValue && d.PMS.ToLower() == "*" && d.ManagementGroup.ToLower() == mgmtGrpSearchValue).ToList();
+
+            if (mnghotel != null && mnghotel.Any())
+                return await Task.FromResult(mnghotel);
+
+
+            //
+
 
             if (exactMatch != null && exactMatch.Any())
                 return await Task.FromResult(exactMatch);

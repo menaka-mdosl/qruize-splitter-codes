@@ -19,7 +19,9 @@ namespace MDO2.Core.QMS.Model.Message.EventData
     }
     public class ConverterQcEventData : ConverterEventDataBase
     {
-        [JsonProperty("reportList")]
+      //  [JsonProperty("reportList")]
+        [JsonProperty("failures")]
+        
         public List<FailuresReportDataElements> ReportList { get; set; } = new List<FailuresReportDataElements>();
 
         public const string QC_TYPE_FORMAT_PROTECTED_FILE = "FORMAT_PROTECTED_FILE";

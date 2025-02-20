@@ -6,7 +6,10 @@ namespace MDO2.Core.QMS.Model.Message.EventData
     public class ConverterFileProcessedEventData : ConverterEventDataBase
     {
 
-        [JsonProperty("reportList")]
+       // [JsonProperty("reportList")]
+
+
+        [JsonProperty("failures")]
         public List<IndexedReportDataElements> ReportList { get; set; } = new List<IndexedReportDataElements>();
     }
 
