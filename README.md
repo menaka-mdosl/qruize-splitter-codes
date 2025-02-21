@@ -1,1 +1,0 @@
-# qruize-splitter-codes
